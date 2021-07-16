@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klasha</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://klastatic.fra1.digitaloceanspaces.com/prod/js/klasha-integration.js"></script>
+</head>
+
+<body onload="initializePopup()" style="background-color:#fff;height:100vh ">
+    <div id="ktest"></div>
+    <script src="https://js.Klasha.co/v1/inline.js"></script>
+    <script type="text/javascript">
+        window.onload = initializePopup;
+        //Initializing Payment Popup
+        function initializePopup() {
+
+            var merchantKey = '${props.currency}';
+            var total = '${props.total}';
+            var callbackUrl = '${props.callbackUrl}';
+            var countryCode = '${props.countryCode}';
+            var sourceCurrency = '${props.sourceCurrency}';
+            var kit = {
+                currency: countryCode,
+                phone_number: '${props.phone_number}',
+                email: '${props.email}',
+                fullname: '${props.fullname}',
+                tx_ref: '${props.tx_ref}' || makeId(8),
+                paymentType: '${props.paymentType}' || "paylink",
+                callBack: callWhenDone
+            };
+
+            //form validation
+            // if (!kit.email || !kit.total || !kit.currency) {
+            //     return validateFeilds(kit.email, kit.total, kit.currency)
+            // }
+
+            var client = new KlashaClient(merchantKey, "1", total, "ktest", callbackUrl, countryCode, sourceCurrency,
+                kit);
+            client.init();
+        }
+
+        //Callback function when payment is complete
+        function callWhenDone(resp) {
+            window.ReactNativeWebView.postMessage(JSON.stringify(resp));
+        }
+
+        function makeId(length) {
+            var result = '';
+            var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            var charactersLength = characters.length;
+            for (var i = 0; i < length; i++) {
+                result += characters.charAt(Math.floor(Math.random() * charactersLength));
+            }
+            return result;
+        }
+    </script>
+</body>
+
+</html>

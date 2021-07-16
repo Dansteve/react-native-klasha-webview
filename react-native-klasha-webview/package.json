@@ -1,0 +1,31 @@
+{
+  "name": "react-native-klasha-webview",
+  "version": "3.2.1",
+  "description": "This package allows you to accept payment in your react native project using Klasha ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "peerDependencies": {
+    "react-native-webview": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dansteve/react-native-klasha-webview.git"
+  },
+  "keywords": [
+    "Klasha",
+    "payment",
+    "react",
+    "react",
+    "native",
+    "card",
+    "recurrent-payment"
+  ],
+  "author": "Dansteve Adekanbi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dansteve/react-native-klasha-webview/issues"
+  },
+  "homepage": "https://github.com/dansteve/react-native-klasha-webview#readme"
+}

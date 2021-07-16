@@ -18,10 +18,17 @@
     "react-native-reanimated": "~2.2.0",
     "react-native-screens": "~3.4.0",
     "react-native-unimodules": "~0.14.3",
-    "react-native-web": "~0.13.12"
+    "react-native-web": "~0.13.12",
+    "react-native-webview": "^11.6.2"
   },
   "devDependencies": {
     "@babel/core": "^7.9.0"
   },
-  "private": true
+  "private": true,
+  "author": "Dansteve Adekanbi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/dansteve/react-native-klasha-webview/issues"
+  },
+  "homepage": "https://github.com/dansteve/react-native-klasha-webview#readme"
 }

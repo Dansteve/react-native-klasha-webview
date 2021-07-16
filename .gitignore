@@ -15,7 +15,7 @@ build/
 !default.perspectivev3
 xcuserdata
 *.xccheckout
-*.moved-aside
+*.movedaside
 DerivedData
 *.hmap
 *.ipa
@@ -34,11 +34,11 @@ local.properties
 # node.js
 #
 node_modules/
-npm-debug.log
-yarn-error.log
+npmdebug.log
+yarnerror.log
 
 # BUCK
-buck-out/
+buckout/
 \.buckd/
 *.keystore
 !debug.keystore
@@ -51,4 +51,7 @@ buck-out/
 
 # Expo
 .expo/
-web-build/
+webbuild/
+
+.expo
+.vcscode
