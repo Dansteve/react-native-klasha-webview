@@ -1,6 +1,6 @@
 {
   "name": "react-native-klasha-webview",
-  "version": "3.2.1",
+  "version": "0.0.1",
   "description": "This package allows you to accept payment in your react native project using Klasha ",
   "main": "index.js",
   "scripts": {
