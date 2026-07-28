@@ -1,31 +1,29 @@
 {
+  "name": "react-native-klasha-webview-example",
+  "version": "1.0.0",
+  "private": true,
   "main": "index.js",
+  "workspaces": [
+    "react-native-klasha-webview"
+  ],
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
     "web": "expo start --web",
-    "start": "react-native start"
+    "test": "npm test --workspace react-native-klasha-webview"
   },
   "dependencies": {
-    "expo": "~42.0.0",
-    "expo-splash-screen": "~0.11.2",
-    "expo-status-bar": "~1.0.4",
-    "expo-updates": "~0.8.0",
-    "react": "16.13.1",
-    "react-dom": "16.13.1",
-    "react-native": "~0.63.4",
-    "react-native-gesture-handler": "~1.10.2",
-    "react-native-reanimated": "~2.2.0",
-    "react-native-screens": "~3.4.0",
-    "react-native-unimodules": "~0.14.3",
-    "react-native-web": "~0.13.12",
-    "react-native-webview": "^11.6.2"
+    "expo": "~57.0.8",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.0",
+    "react-native-webview": "13.16.1"
   },
-  "devDependencies": {
-    "@babel/core": "^7.9.0"
+  "author": {
+    "name": "Dansteve Adekanbi",
+    "url": "https://dansteve.com"
   },
-  "private": true,
-  "author": "Dansteve Adekanbi",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/dansteve/react-native-klasha-webview/issues"

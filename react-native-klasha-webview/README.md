@@ -1,207 +1,186 @@
 # react-native-klasha-webview
 
-The package allows you accept payment using Klasha and guess what , it doesn't require any form of linking, just install and begin to use .
+Accept [Klasha](https://klasha.com) payments in a React Native app. The official
+Klasha inline checkout (`https://js.klasha.com/pay.js`) is hosted inside a
+`react-native-webview`, so there is nothing to link and no native code to build.
 
-### [](https://github.com/dansteve/react-native-klasha-webview#installation)Installation
+---
 
-Add react-native-klasha-webview to your project by running;
+## Upgrading from 0.0.x — read this first
 
-`npm install react-native-klasha-webview`
+`1.0.0` is a rewrite of the WebView page. Several of these changes affect money.
 
-or
+| | 0.0.1 | 1.0.0 |
+| :-- | :-- | :-- |
+| **`isTestMode`** | never passed to `KlashaClient` (8 args, not 9) — which on the current `pay.js` means sandbox traffic would go to production | forwarded as the 9th `KlashaClient` argument, coerced to a real boolean |
+| **Script URLs** | jQuery + `klastatic.fra1.digitaloceanspaces.com/...` (bucket deleted, 404) + `js.Klasha.co/v1/inline.js` (no DNS) | the single live `https://js.klasha.com/pay.js`; jQuery removed |
+| **Prop injection** | every prop was pasted into a `'...'` JS literal, so a value containing `'` executed as code inside the payment page | the whole config is serialised with `JSON.stringify` and HTML-escaped |
+| **Defaults** | declared in `Klasha.defaultProps` *after* `forwardRef()` had wrapped the component, so React applied none of them | ordinary destructuring defaults |
+| **`'${x}' \|\| fallback`** | always truthy, so a missing prop produced the literal string `"undefined"` | defaults resolved in JS before serialisation |
+| **`kit.phone`** | only `phone_number` was set, which `pay.js` never reads | `phone` (and `phone_number` for compatibility) |
+| **Container `<div>`** | hardcoded `id="ktest"`, appended again on every run | unique per instance, reused, cleaned up |
 
-`yarn add react-native-klasha-webview`
+**`isTestMode` now defaults to `true`** (sandbox), and the default actually
+applies — on 0.0.1 the whole `defaultProps` block was dead code. Pass
+`isTestMode={false}` explicitly to take real money.
 
-### **One more thing**
+---
 
-To frontload the installation work, let's also install and configure dependencies used by this project, being **react-native-webview**
+## Installation
 
-run
+```sh
+npm install react-native-klasha-webview react-native-webview
+# or
+yarn add react-native-klasha-webview react-native-webview
+```
 
-`yarn add react-native-webview`
+Expo:
 
-for IOS: `cd iOS && pod install && cd ..`
+```sh
+npx expo install react-native-webview
+```
 
-for expo applications run;
+Bare React Native, iOS: `cd ios && pod install && cd ..`
 
-`expo install react-native-webview`
+Peer requirements: `react >= 17`, `react-native >= 0.65`,
+`react-native-webview >= 11`.
 
-and that's it, you're all good to go!
+TypeScript definitions ship with the package — no `@types` install needed.
 
-### [](https://github.com/dansteve/react-native-klasha-webview#usage)Usage 1
+---
 
-```javascript
+## Usage
+
+### Built-in pay button
+
+```jsx
 import React from "react";
-import KlashaWebView from "react-native-klasha-webview";
 import { View } from "react-native";
+import KlashaWebView from "react-native-klasha-webview";
 
-function Pay() {
+export function Pay() {
   return (
     <View style={{ flex: 1 }}>
       <KlashaWebView
-        buttonText="Pay Now"
-        showPayButton={false}
-        merchantKey="your-merchantKey"
-        businessId="your-businessId"
+        merchantKey="your-merchant-key"
+        businessId="your-business-id"
         amount={120000}
-        customerEmail="Klashawebview@something.com"
-        customerPhoneNumber="08143108254"
-        customerFullname="Dansteve Adekanbi"
-        callbackUrl=""
         countryCode="NGN"
         sourceCurrency="NGN"
-        paymentType=""
-        ActivityIndicatorColor="green"
-        SafeAreaViewContainer={{ marginTop: 5 }}
-        SafeAreaViewContainerModal={{ marginTop: 5 }}
-        callBack={(res) => {
-          // handle response here
-          console.log(res);
-        }}
-        autoStart={false}
+        customerEmail="buyer@example.com"
+        customerPhoneNumber="08000000000"
+        customerFullname="Ada Lovelace"
+        isTestMode={__DEV__}
+        buttonText="Pay Now"
+        callBack={(res) => console.log(res.data)}
+        onError={(err) => console.warn(err.message)}
       />
     </View>
   );
 }
 ```
 
-### Usage 2 - Custom Pay Button
+### Your own trigger
 
-Make use of a custom payment trigger button. See example below;
-
-```javascript
-import React from 'react';
-import KlashaWebView from 'react-native-klasha-webview';
-import { View } from 'react-native';
-
-function Pay() {
-  return (
-    <View style={{flex: 1}}>
-      <KlashaWebView
-        buttonText="Pay Now"
-        showPayButton={false}
-        merchantKey="your-merchantKey"
-        businessId="your-businessId"
-        amount={120000}
-        customerEmail="Klashawebview@something.com"
-        customerPhoneNumber="08143108254"
-        customerFullname="Dansteve Adekanbi"
-        callbackUrl=""
-        countryCode="NGN"
-        sourceCurrency="NGN"
-        paymentType=""
-        tx_ref={uuid()} // this is only for cases where you have a reference number generated
-        ActivityIndicatorColor="green"
-        SafeAreaViewContainer={{marginTop: 5}}
-        SafeAreaViewContainerModal={{marginTop: 5}}
-        handleWebViewMessage={(e) => {
-          // handle the message
-        }}
-        callBack={(e) => {
-          // handle response here
-          console.log(res);
-        }}
-        autoStart={false}
-        renderButton={(onPress) => {
-          <Button onPress={onPress}>
-            Pay Now
-          </Button>
-        }}
-      />
-    </View>
-  );
-}
+```jsx
+<KlashaWebView
+  merchantKey="your-merchant-key"
+  amount={120000}
+  isTestMode={false}
+  renderButton={(startTransaction) => (
+    <Button title="Checkout" onPress={startTransaction} />
+  )}
+  callBack={(res) => console.log(res.data)}
+/>
 ```
 
-## Usage 3 - Using Refs
+### Via a ref
 
-Make use of a `ref` to start transaction. See example below;
+```jsx
+const klasha = useRef(null);
 
-```javascript
-import React, { useRef } from 'react';
-import KlashaWebView from 'react-native-klasha-webview';
-import { View, TouchableOpacity,Text } from 'react-native';
+<KlashaWebView ref={klasha} showPayButton={false} merchantKey="..." amount={5000} />;
 
-function Pay(){
-  const KlashaWebViewRef = useRef();
-
-  return (
-    <View style={{flex: 1}}>
-      <KlashaWebView
-        showPayButton={false}
-        merchantKey="your-merchantKey"
-        businessId="your-businessId"
-        amount={120000}
-        customerEmail="Klashawebview@something.com"
-        customerPhoneNumber="08143108254"
-        customerFullname="Dansteve Adekanbi"
-        callbackUrl=""
-        countryCode="NGN"
-        sourceCurrency="NGN"
-        paymentType=""
-        ActivityIndicatorColor="green"
-        SafeAreaViewContainer={{marginTop: 5}}
-        SafeAreaViewContainerModal={{marginTop: 5}}
-        tx_ref={KlashaWebViewRef}
-        callBack={(res) => {
-          // handle response here
-          console.log(res);
-        }}
-      />
-
-        <TouchableOpacity onPress={()=> KlashaWebViewRef.current.StartTransaction()}>
-          <Text>Pay Now</Text>
-        </TouchableOpacity>
-      </View>
-  );
-}
+<TouchableOpacity onPress={() => klasha.current.startTransaction()}>
+  <Text>Pay Now</Text>
+</TouchableOpacity>;
 ```
 
-## Note:
+Ref handle: `startTransaction()`, `closeTransaction()`, `getTransactionRef()`.
+The original `StartTransaction()` / `endTransaction()` names still work.
 
-You can also make use of the new props `autoStart` to initiate payment once the screen mounts. Just see `autoStart={true}`. This is set to `false` by default.
+---
 
-## API's
+## Props
 
-| Name                                 |                                                                                           use/description                                                                                           |                                                      extra |
-| :----------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | ---------------------------------------------------------: |
-| `buttonText`                         |                                                                                     Defines text on the button                                                                                      |                                         default: `Pay Now` |
-| `textStyles`                         |                                                                                  Defines styles for text in button                                                                                  |                                                     `nill` |
-| `btnStyles`                          |                                                                                      Defines style for button                                                                                       |                                                     `nill` |
-| `merchantKey`                        |                                                                   merchantKey(visit Klasha.com to get yours)                                                                   |                                                     `nill` |
-| `businessId`                             |                                                                                          businessId                                                                                          |                                                     `1` |
-| `amount`                             |                                                                                          Amount to be paid                                                                                          |                                                     `nill` |
-| `callbackUrl`                             |                                                                                          callbackUrl                                                                                          |                                                     `nill` |
-| `countryCode(required by Klasha)`                             |                                                                                          countryCode                                                                                          |                                                     `nill` |
-| `sourceCurrency`                             |                                                                                          sourceCurrency                                                                                          |                                                     `countryCode` |
-| `ActivityIndicatorColor`             |                                                                                           color of loader                                                                                           |                                           default: `green` |
-| `customerEmail(required by Klasha)` |                                                                                            Customer email                                                                                            |                                            default: `nill` |
-| `customerPhoneNumber(required by Klasha)`                      |                                                                                           Customer mobile                                                                                            |                                            default: `nill` |
-| `customerFullname(required by Klasha)`                        |                                                                                            Customer Name                                                                                             |                                            default: `nill` |
-| `callBack`                          |                                    callback function                                     |                                            default: `nill` |
-| `autoStart`                          |                                                                               Auto start payment once page is opened                                                                                |                                           default: `false` |
-| `SafeAreaViewContainer`              |                                                                                  style for SafeAreaView containter                                                                                  |                                            default: `nill` |
-| `SafeAreaViewContainerModal`         |                                                                                  style for SafeAreaView for modal                                                                                   |                                            default: `nill` |
-| `showPayButton`                      |                                                                                Control the Pay Now button visibility                                                                                |                                            default: `true` |
-| `tx_ref`                          |                                                                         Reference number, if you have already generated one                                                                         | default: `''+Math.floor((Math.random() * 1000000000) + 1)` |
-| `renderButton`                       |                                                            Render your own Pay Now button, should be used when `showPayButton` is `true`                                                            |                                            default: `null` |
-| `handleWebViewMessage`               |                                                                          Will be called when a WebView receives a message                                                                           |                                            default: `true` |
+### Payment
 
-> For more information checkout [klasha's documentation](https://documenter.getpostman.com/view/8963555/TzJoFgHh)
+| Prop | Type | Default | Notes |
+| :-- | :-- | :-- | :-- |
+| `merchantKey` | `string` | — | **Required.** From your Klasha dashboard. |
+| `businessId` | `string \| number` | `1` | |
+| `amount` | `number \| string` | `10` | In `countryCode` currency. Must be `> 0`. |
+| `countryCode` | `string` | `"NGN"` | Destination currency. |
+| `sourceCurrency` | `string` | `countryCode` | |
+| `callbackUrl` | `string` | `""` | |
+| `customerEmail` | `string` | `""` | Required by Klasha. |
+| `customerPhoneNumber` | `string` | `""` | Sent as `kit.phone`. |
+| `customerFullname` | `string` | `""` | |
+| `tx_ref` | `string` | generated | A fresh 16-char reference per transaction if omitted. |
+| `paymentType` | `string` | `"paylink"` | |
+| `isTestMode` | `boolean` | **`true`** | `true` = Klasha sandbox. Pass `false` to take real money. |
+| `containerId` | `string` | generated | DOM id inside the WebView. Must match `[A-Za-z0-9_-]+`. |
+
+### Behaviour
+
+| Prop | Type | Default | Notes |
+| :-- | :-- | :-- | :-- |
+| `autoStart` | `boolean` | `false` | Open the checkout on mount. |
+| `showPayButton` | `boolean` | `true` | |
+| `callBack` | `(payload) => void` | — | Called with `{ data: { event: "done", response } }`. |
+| `onError` | `(payload) => void` | — | Config errors and script-load failures. |
+| `handleWebViewMessage` | `(raw: string) => void` | — | Every raw message from the WebView. |
+
+### Presentation
+
+| Prop | Type | Default |
+| :-- | :-- | :-- |
+| `buttonText` | `string` | `"Pay Now"` |
+| `btnStyles` / `textStyles` | style | — |
+| `ActivityIndicatorColor` | `string` | `"green"` |
+| `renderButton` | `(start) => ReactElement` | — |
+| `SafeAreaViewContainer` | style | — |
+| `SafeAreaViewContainerModal` | style | — |
+| `modalProps` | `Partial<ModalProps>` | — |
+| `webViewProps` | `object` | — |
+
+---
+
+## Security notes
+
+- **Never ship a secret key.** `merchantKey` is a publishable key; if a real one
+  has ever been committed to a repository, rotate it.
+- The WebView page is generated with `JSON.stringify` plus HTML escaping, so no
+  prop value — including customer-supplied names and emails — can escape into
+  the payment page's script context. There is a regression test for this.
+- Errors and warnings never log the config object, because it holds the
+  merchant key.
+
+## Development
+
+```sh
+npm install     # from the repository root (npm workspaces)
+npm test        # jest
+```
+
+The test suite executes the generated WebView page inside jsdom against a mock
+`KlashaClient` and asserts the exact constructor arguments. It cannot and does
+not complete a real payment.
 
 ## Contributing
 
-Please feel free to fork this package and contribute by submitting a pull request to enhance the functionalities.
-
-## How can I thank you?
-
-Why not star the github repo? I'd love the attention! Why not share the link for this repository on Twitter or anywhere? Spread the word!
-
-Don't forget to [follow me on twitter](https://twitter.com/dansteveade)!
-
-Thanks!
-Dansteve Adekanbi.
+Fork and open a pull request. See [contribution.md](contribution.md).
 
 ## License
 
-The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+MIT — see [LICENSE.md](LICENSE.md).
