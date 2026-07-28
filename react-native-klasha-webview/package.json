@@ -33,7 +33,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dansteve/react-native-klasha-webview.git"
+    "url": "git+https://github.com/Dansteve/react-native-klasha-webview.git"
   },
   "keywords": [
     "klasha",
@@ -55,7 +55,7 @@
     "node": ">=18"
   },
   "bugs": {
-    "url": "https://github.com/dansteve/react-native-klasha-webview/issues"
+    "url": "https://github.com/Dansteve/react-native-klasha-webview/issues"
   },
-  "homepage": "https://github.com/dansteve/react-native-klasha-webview#readme"
+  "homepage": "https://github.com/Dansteve/react-native-klasha-webview#readme"
 }
