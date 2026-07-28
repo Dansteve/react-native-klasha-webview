@@ -1,0 +1,76 @@
+name: Publish to npm
+
+# Fires when you publish a GitHub Release. Draft a release from a tag and this
+# tests and pushes the library to npmjs.com.
+#
+# Note the layout: the repo root is the Expo demo app and is `private: true`.
+# The published package lives in the react-native-klasha-webview/ workspace.
+on:
+  release:
+    types: [published]
+  # Manual escape hatch: re-run a publish without cutting another release.
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm Trusted Publishing (OIDC) and build provenance.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted Publishing requires npm >= 11.5.1. Runner images ship older.
+      - name: Use an npm that supports trusted publishing
+        run: npm install -g npm@latest
+
+      # Installs the workspace too, so there is a single copy of React/RN.
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Check version matches the tag
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./react-native-klasha-webview/package.json').version")
+          echo "tag=$TAG library package.json=$PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag $TAG does not match library version $PKG"
+            exit 1
+          fi
+
+      # This package builds the payment page as a string, so a regression that
+      # reintroduced raw interpolation would not fail a type check. Assert the
+      # escaping holds and that the dead CDNs have not come back.
+      - name: Assert the injection defence still holds
+        working-directory: react-native-klasha-webview
+        run: |
+          node -e "
+            const {buildKlashaHtml} = require('./src/html.js');
+            const {resolveKlashaConfig} = require('./src/config.js');
+            const html = buildKlashaHtml(resolveKlashaConfig({
+              merchantKey: String.raw\`O'Brien\"); alert(1)//\`,
+              customerFullname: '</scr' + 'ipt><scr' + 'ipt>window.__pwned=true;</scr' + 'ipt>',
+              businessId: '1', amount: 100, isTestMode: true,
+            }));
+            const fail = m => { console.error('::error::' + m); process.exit(1); };
+            if (/'\); alert\(1\)/.test(html)) fail('prop escaped its string literal');
+            if (html.includes('</scr' + 'ipt><scr' + 'ipt>window.__pwned')) fail('prop closed the script element');
+            if (!html.includes('js.klasha.com/pay.js')) fail('the live Klasha script is not referenced');
+            if (/klastatic\.fra1|js\.Klasha\.co\/|jquery/i.test(html)) fail('a dead CDN is referenced');
+            console.log('injection defence holds; only pay.js is loaded');
+          "
+
+      # No NODE_AUTH_TOKEN. Trusted Publishing exchanges the OIDC token for
+      # short-lived credentials, so there is no secret to leak or rotate, and it
+      # is not blocked by the 2FA on the account.
+      - name: Publish
+        run: npm publish ./react-native-klasha-webview --access public
