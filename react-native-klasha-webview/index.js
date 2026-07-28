@@ -1,201 +1,288 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
+ * react-native-klasha-webview
  *
- * @format
- * @flow
+ * Accept Klasha payments from a React Native app by hosting the official
+ * `https://js.klasha.com/pay.js` inline checkout inside a WebView.
  */
 
-/*jshint esversion: 9 */
-
 import React, {
-  useState,
+  useCallback,
   useEffect,
-  forwardRef,
   useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  forwardRef,
 } from "react";
 import {
-  Modal,
-  Text,
-  View,
-  TouchableOpacity,
   ActivityIndicator,
+  Modal,
   SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { WebView } from "react-native-webview";
 
-function Klasha(props, ref) {
-  const [isLoading, setisLoading] = useState(true);
-  const [showModal, setshowModal] = useState(false);
+import {
+  generateContainerId,
+  generateTxRef,
+  resolveKlashaConfig,
+  validateKlashaConfig,
+} from "./src/config";
+import { buildKlashaHtml } from "./src/html";
 
-  useEffect(() => {
-    autoStartCheck();
+const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  loader: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});
+
+/**
+ * Defaults are declared here, as ordinary destructuring defaults.
+ *
+ * They used to live in a `Klasha.defaultProps = { ... }` block placed *after*
+ * `export default forwardRef(Klasha)`. React never saw them: `forwardRef` had
+ * already captured the inner function, `defaultProps` is ignored on forwardRef
+ * components in React 18, and React 19 dropped `defaultProps` for function
+ * components altogether. Every one of those defaults -- including
+ * `isTestMode: true` -- was inert.
+ */
+function Klasha(
+  {
+    // --- payment ---
+    merchantKey,
+    businessId = 1,
+    amount = 10,
+    callbackUrl = "",
+    countryCode = "NGN",
+    sourceCurrency,
+    customerEmail,
+    customerPhoneNumber,
+    customerFullname,
+    tx_ref: txRefProp,
+    paymentType = "paylink",
+    isTestMode = true,
+    containerId,
+
+    // --- behaviour ---
+    autoStart = false,
+    showPayButton = true,
+    onError,
+    callBack,
+    handleWebViewMessage,
+
+    // --- presentation ---
+    buttonText = "Pay Now",
+    ActivityIndicatorColor = "green",
+    renderButton,
+    btnStyles,
+    textStyles,
+    SafeAreaViewContainer,
+    SafeAreaViewContainerModal,
+    modalProps,
+    webViewProps,
+  },
+  ref
+) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+
+  // One container id per component instance. `pay.js` renders into
+  // document.getElementById(containerId); the old code hardcoded "ktest" and
+  // appended a fresh <div id="ktest"> on every run.
+  const instanceContainerId = useRef(null);
+  if (instanceContainerId.current === null) {
+    instanceContainerId.current = containerId || generateContainerId();
+  }
+
+  // A transaction reference is minted per transaction, not once per module.
+  const [sessionTxRef, setSessionTxRef] = useState(
+    () => txRefProp || generateTxRef()
+  );
+
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  const config = useMemo(
+    () =>
+      resolveKlashaConfig({
+        merchantKey,
+        businessId,
+        amount,
+        containerId: instanceContainerId.current,
+        callbackUrl,
+        countryCode,
+        sourceCurrency,
+        customerEmail,
+        customerPhoneNumber,
+        customerFullname,
+        tx_ref: txRefProp || sessionTxRef,
+        paymentType,
+        isTestMode,
+      }),
+    [
+      merchantKey,
+      businessId,
+      amount,
+      callbackUrl,
+      countryCode,
+      sourceCurrency,
+      customerEmail,
+      customerPhoneNumber,
+      customerFullname,
+      txRefProp,
+      sessionTxRef,
+      paymentType,
+      isTestMode,
+    ]
+  );
+
+  const html = useMemo(() => buildKlashaHtml(config), [config]);
+
+  const closeTransaction = useCallback(() => {
+    setShowModal(false);
+    setIsLoading(true);
   }, []);
 
-  const autoStartCheck = () => {
-    if (props.autoStart) {
-      setshowModal(true);
+  const startTransaction = useCallback(() => {
+    const errors = validateKlashaConfig(config);
+    if (errors.length > 0) {
+      const message = `[react-native-klasha-webview] ${errors.join(" ")}`;
+      if (onErrorRef.current) {
+        onErrorRef.current({ event: "error", message, errors });
+      } else if (typeof console !== "undefined" && console.warn) {
+        // Never log the config object itself -- it holds the merchant key.
+        console.warn(message);
+      }
+      return;
     }
-  };
+    // Fresh reference for every attempt unless the merchant pinned one.
+    if (!txRefProp) {
+      setSessionTxRef(generateTxRef());
+    }
+    setIsLoading(true);
+    setShowModal(true);
+  }, [config, txRefProp]);
 
-  useImperativeHandle(ref, () => ({
-    StartTransaction() {
-      setshowModal(true);
+  useEffect(() => {
+    if (autoStart) {
+      startTransaction();
+    }
+    // Only on mount: autoStart is a "do this once" flag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      // Original (capitalised) API, kept for backwards compatibility.
+      StartTransaction: startTransaction,
+      endTransaction: closeTransaction,
+      // Conventional casing.
+      startTransaction,
+      closeTransaction,
+      getTransactionRef: () => config.txRef,
+    }),
+    [startTransaction, closeTransaction, config.txRef]
+  );
+
+  const messageReceived = useCallback(
+    (raw) => {
+      if (handleWebViewMessage) {
+        handleWebViewMessage(raw);
+      }
+
+      let webResponse;
+      try {
+        webResponse = JSON.parse(raw);
+      } catch (err) {
+        return;
+      }
+
+      switch (webResponse.event) {
+        case "done":
+          closeTransaction();
+          if (callBack) {
+            callBack({ data: webResponse });
+          }
+          break;
+        case "error":
+          if (onErrorRef.current) {
+            onErrorRef.current(webResponse);
+          }
+          break;
+        default:
+          break;
+      }
     },
-    endTransaction() {
-      setshowModal(false);
-    },
-  }));
+    [callBack, closeTransaction, handleWebViewMessage]
+  );
 
-  const Klashacontent = `   
-  <!DOCTYPE html>
-  <html lang="en">
-  
-  <head>
-      <meta charset="UTF-8">
-      <meta http-equiv="X-UA-Compatible" content="IE=edge">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Klasha</title>
-      <link rel="stylesheet" href="/styles.css">
-      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-      <script src=" ${props.isTestMode ? 'https://klastatic.fra1.digitaloceanspaces.com/test/js/klasha-integration.js' : 'https://klastatic.fra1.digitaloceanspaces.com/prod/js/klasha-integration.js'} "></script>
-  </head>
-  
-  <body onload="initializePopup()" style="background-color:#fff;height:100vh ">
-      <div id="ktest"></div>
-      <script src="https://js.Klasha.co/v1/inline.js"></script>
-      <script type="text/javascript">
-          window.onload = initializePopup;
-          //Initializing Payment Popup
-          function initializePopup() {
-  
-              var merchantKey = '${props.merchantKey}';
-              var businessId = '${props.businessId}' || 1;
-              var amount = '${props.amount}';
-              var callbackUrl = '${props.callbackUrl}' || '';
-              var countryCode = '${props.countryCode}';
-              var sourceCurrency = '${props.sourceCurrency}' || countryCode;
-              var kit = {
-                  currency: countryCode,
-                  phone_number: '${props.customerPhoneNumber}',
-                  email: '${props.customerEmail}',
-                  fullname: '${props.customerFullname}',
-                  tx_ref: '${props.tx_ref}' || makeId(8),
-                  paymentType: '${props.paymentType}' || "paylink",
-                  callBack: callWhenDone
-              };
-  
-              //form validation
-              // if (!kit.email || !kit.amount || !kit.currency) {
-              //     return validateFeilds(kit.email, kit.total, kit.currency)
-              // }
-  
-              var client = new KlashaClient(merchantKey, businessId , amount, "ktest", callbackUrl, countryCode, sourceCurrency,
-                  kit);
-              client.init();
-          }
-  
-          //Callback function when payment is complete
-          function callWhenDone(response) {
-              var resp = {event:'done', response:response};
-              window.ReactNativeWebView.postMessage(JSON.stringify(resp));
-          }
-  
-          function makeId(length) {
-              var result = '';
-              var characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-              var charactersLength = characters.length;
-              for (var i = 0; i < length; i++) {
-                  result += characters.charAt(Math.floor(Math.random() * charactersLength));
-              }
-              return result;
-          }
-      </script>
-  </body>
-  
-  </html>
-      `;
-
-  const messageReceived = (data) => {
-    var webResponse = JSON.parse(data);
-    if (props.handleWebViewMessage) {
-      props.handleWebViewMessage(data);
-    }
-    switch (webResponse.event) {
-      case "done":
-        setshowModal(false);
-        props?.callBack({
-          // status: "success",
-          // transactionRef: reference,
-          data: webResponse,
-        });
-        break;
-      default:
-        if (props.handleWebViewMessage) {
-          props.handleWebViewMessage(data);
-        }
-        break;
-    }
-  };
-
-  const showPaymentModal = () => {
-    setshowModal(true);
-  };
-
-  const button = props.renderButton ? (
-    props.renderButton(showPaymentModal)
+  const button = renderButton ? (
+    renderButton(startTransaction)
   ) : (
     <TouchableOpacity
-      style={props.btnStyles}
-      onPress={() => showPaymentModal()}
+      accessibilityRole="button"
+      style={btnStyles}
+      onPress={startTransaction}
     >
-      <Text style={props.textStyles}>{props.buttonText}</Text>
+      <Text style={textStyles}>{buttonText}</Text>
     </TouchableOpacity>
   );
 
   return (
-    <SafeAreaView style={[{ flex: 1 }, props.SafeAreaViewContainer]}>
+    <SafeAreaView style={[styles.fill, SafeAreaViewContainer]}>
       <Modal
-        style={[{ flex: 1 }]}
         visible={showModal}
         animationType="slide"
         transparent={false}
+        onRequestClose={closeTransaction}
+        {...modalProps}
       >
-        <SafeAreaView style={[{ flex: 1 }, props.SafeAreaViewContainerModal]}>
-          <WebView
-            style={[{ flex: 1 }]}
-            source={{ html: Klashacontent }}
-            onMessage={(e) => {
-              messageReceived(e.nativeEvent.data);
-            }}
-            onLoadStart={() => setisLoading(true)}
-            onLoadEnd={() => setisLoading(false)}
-          />
+        <SafeAreaView style={[styles.fill, SafeAreaViewContainerModal]}>
+          {/*
+            The WebView is only mounted while the modal is open. That guarantees
+            a brand new document -- and therefore a brand new `kit` object --
+            for every transaction, which matters because pay.js mutates it.
+          */}
+          {showModal && (
+            <WebView
+              style={styles.fill}
+              originWhitelist={["*"]}
+              javaScriptEnabled
+              domStorageEnabled
+              source={{ html, baseUrl: "https://js.klasha.com" }}
+              onMessage={(event) => messageReceived(event.nativeEvent.data)}
+              onLoadStart={() => setIsLoading(true)}
+              onLoadEnd={() => setIsLoading(false)}
+              {...webViewProps}
+            />
+          )}
 
-          {isLoading && (
-            <View>
-              <ActivityIndicator
-                size="large"
-                color={props.ActivityIndicatorColor}
-              />
+          {isLoading && showModal && (
+            <View style={styles.loader} pointerEvents="none">
+              <ActivityIndicator size="large" color={ActivityIndicatorColor} />
             </View>
           )}
         </SafeAreaView>
       </Modal>
-      {props.showPayButton && button}
+      {showPayButton && button}
     </SafeAreaView>
   );
 }
 
-export default forwardRef(Klasha);
+const KlashaWebView = forwardRef(Klasha);
+KlashaWebView.displayName = "KlashaWebView";
 
-Klasha.defaultProps = {
-  buttonText: "Pay Now",
-  amount: 10,
-  ActivityIndicatorColor: "green",
-  autoStart: false,
-  showPayButton: true,
-  countryCode: "NGN",
-  isTestMode : true,
-  tx_ref: "" + Math.floor(Math.random() * 1000000000 + 1),
-};
+export default KlashaWebView;
+export { buildKlashaHtml } from "./src/html";
+export {
+  generateTxRef,
+  resolveKlashaConfig,
+  validateKlashaConfig,
+} from "./src/config";
